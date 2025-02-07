@@ -16,7 +16,7 @@
 // Function Declarations
 int create_server(int player_count);
 void add_new_player(int server_fd, int *client_sockets, char **player_names, int *name_received, int *connections_pending_name_input);
-void handle_client_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *connections_pending_name_input);
+void handle_client_name_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *connections_pending_name_input);
 void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players);
 void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds, char **player_names);
 int is_word_guessed(int *player_progress, int word_length);
@@ -76,7 +76,7 @@ int main(void) {
         }
 
         // Handle player name input asynchronously
-        handle_client_input(client_sockets, player_names, name_received, &connected_players, &connections_pending_name_input);
+        handle_client_name_input(client_sockets, player_names, name_received, &connected_players, &connections_pending_name_input);
     }
 
     // Send ready-up message to all players
@@ -188,7 +188,7 @@ void add_new_player(int server_fd, int *client_sockets, char **player_names, int
 }
 
 // Handle client input asynchronously (players can enter names independently)
-void handle_client_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *connections_pending_name_input) {
+void handle_client_name_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *connections_pending_name_input) {
     char name_buffer[50];
 
     for (int i = 0; i < PLAYER_COUNT; i++) {
