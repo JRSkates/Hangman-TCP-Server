@@ -6,10 +6,11 @@
 #include <sys/types.h>  // System data types (for socket operations)
 #include <sys/socket.h> // Socket programming functions
 #include <sys/select.h> // Multiplexing functions (select, FD_SET, etc.)
+#include <ctype.h>
 
 // Server Configuration Constants
 #define PORT 8080         // The port number the server listens on
-#define PLAYER_COUNT 4   // Maximum number of players allowed in the game
+#define PLAYER_COUNT 2  // Maximum number of players allowed in the game
 #define MAX_GUESSES 6     // Maximum wrong guesses allowed per player
 
 // Function Declarations
@@ -17,6 +18,10 @@ int create_server(int player_count);
 void add_new_player(int server_fd, int *client_sockets, char **player_names, int *name_received, int *connections_pending_name_input);
 void handle_client_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *connections_pending_name_input);
 void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players);
+void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds);
+int is_word_guessed(int *player_progress, int word_length);
+void send_game_state(int client_socket, int *server_arr, int guesses_left, int word_length);
+
 
 // Global word for all clients to guess
 char goal_word[] = "HELLO"; // Example word
@@ -94,21 +99,49 @@ int main(void) {
 
     // Main Game loop
 
-    int word_length = strlen(goal_word);
-    int guesses_left[connected_players]; // Stores remaining guesses for each player (associated by index position)
-    int server_arr[connected_players][word_length]; // Nested tracking arrays for each clients progress when guessing the word
+    play_hangman(client_sockets, connected_players, goal_word, &readfds);
 
-    // Initialize guess tracking arrays and remaining guesses for each player
-    for (int i = 0; i < connected_players; i++) {
-        guesses_left[i] = MAX_GUESSES; // Start each player with max guesses
-        memset(server_arr[i], 0, word_length * sizeof(int)); // Initalize server guess tracking arrays
-    }
 
-    // Send the length of the goal word to all clients
-    for (int i = 0; i < connected_players; i++){
-        send(client_sockets[i], &word_length, sizeof(word_length), 0);
-        printf("Word length: %d sent to Player: %d\n", word_length, i + 1);
-    }
+
+    /* *** TO DO ***
+    void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds)
+    Handles the core gameplay loop.
+    Receives guesses, updates server_arr, tracks progress.
+
+    int is_word_guessed(int *player_progress, int word_length)   
+    Checks if a player has correctly guessed all letters.
+
+    void send_game_state(int client_socket, int *server_arr, int guesses_left, int word_length)
+    Sends progress (boolean_arr) to the client.
+
+
+
+    Steps to Implement the Guessing Logic:
+
+    Loop Until Each Client Finishes
+    A client finishes when they either:
+    Guess all letters in the word (server_arr[i] is all 1s)
+    Run out of guesses_left
+    The server should track this individually for each player.
+
+    Receive Guesses from Clients
+    Clients will send a single character.
+    The server will validate the input (only accept letters).
+    The server will check if the letter is in goal_word.
+
+    Process the Guess
+    Compare the guessed letter against each letter in goal_word.
+    If the letter matches, update server_arr[i][pos] = 1 for each occurrence.
+    Otherwise, decrement guesses_left[i].
+
+    Send Feedback to Client
+    Send the boolean_arr[i] array so the client knows how successful their last guess was.
+
+    Check for End Conditions
+    If server_arr[i] is all 1s → Client won.
+    If guesses_left[i] == 0 → Client lost.
+    If all clients finish → Move to the next phase (leaderboard).
+    */
 
 
 
@@ -289,6 +322,132 @@ void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, 
     printf("All players are ready! Starting the game...\n");
 }
 
+
+void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds) {
+    int word_length = strlen(goal_word);
+    int guesses_left[connected_players]; // Stores remaining guesses for each player (associated by index position)
+    int server_arr[connected_players][word_length]; // Nested tracking arrays for each clients progress when guessing the word
+    int game_finished[connected_players]; // Tracks whether a player has finished
+
+    // Send the length of the goal word to all clients
+    for (int i = 0; i < connected_players; i++){
+        send(client_sockets[i], &word_length, sizeof(word_length), 0);
+        printf("Word length: %d sent to Player: %d\n", word_length, i + 1);
+    }
+
+    // Initialize guess tracking arrays and remaining guesses for each player
+    for (int i = 0; i < connected_players; i++) {
+        guesses_left[i] = MAX_GUESSES; // Start each player with max guesses
+        memset(server_arr[i], 0, word_length * sizeof(int)); // Initalize server guess tracking arrays
+        game_finished[i] = 0; // 0 means player has NOT finished
+    }
+
+    printf("Game started!\n");
+
+    char guess;
+
+    while (1) { // Keep looping until all players have finished
+        FD_ZERO(readfds);
+        int max_sd = 0;
+        int active_players = 0;
+
+        for (int i = 0; i < connected_players; i++) {  // Loop only through active players
+            if (client_sockets[i] > 0 && !game_finished[i]) {
+                FD_SET(client_sockets[i], readfds);
+                if (client_sockets[i] > max_sd) {
+                    max_sd = client_sockets[i];
+                }
+                active_players++;
+            }
+        }
+
+        if (active_players == 0) {
+            printf("All players have finished the game. Exiting...\n");
+            break;
+        }
+
+        if (select(max_sd + 1, readfds, NULL, NULL, NULL) < 0) {
+            perror("Select failed");
+            exit(EXIT_FAILURE);
+        }
+
+        // Process guesses for each player
+        for (int i = 0; i < connected_players; i++) {
+            int sd = client_sockets[i];
+
+            if (game_finished[i]) {
+                continue;
+            }
+
+            if (FD_ISSET(sd, readfds)) {
+                memset(&guess, 0, sizeof(guess));
+                int valread = recv(sd, &guess, sizeof(guess), 0);
+
+                if (valread > 0) { 
+                    guess = toupper(guess); // Convert input to upper case
+
+                    // Ignore newline and carriage return characters
+                    if (guess == '\n' || guess == '\r') {
+                        continue; // Skip this iteration and wait for a real input
+                    }
+                
+                    // Ensure it's a valid alphabetical letter (A-Z only)
+                    if (guess < 'A' || guess > 'Z') {
+                        printf("Invalid input received from Player %d: %c (ASCII: %d)\n", i + 1, guess, guess);
+                        continue; // Ignore anything that isn't a valid letter
+                    }
+
+                    printf("Player %d: guessed %c\n", i + 1, guess);
+
+                    int boolean_arr[word_length]; // Temp array to send back to client with guess results
+                    memset(boolean_arr, 0, word_length * sizeof(int));
+
+                    int correct_guess = 0;
+
+                    // Check if the guessed letter is in the goal word
+                    for (int j = 0; j < word_length; j++) {
+                        if (goal_word[j] == guess) {
+                            boolean_arr[j] = 1;
+                            server_arr[i][j] = 1;
+                            correct_guess = 1;
+                        }
+                    }
+
+                    // If guess if incorrect, lose a life
+                    if (!correct_guess) {
+                        guesses_left[i]--; // Decrement remaining guesses
+                        printf("Player %d: incorrect guess. Remaining guesses: %d\n", i + 1, guesses_left[i]);
+                    } else {
+                        printf("Player %d: correct guess.\n", i + 1);
+                    }
+
+                    // Send the updated boolean array with guessed letters to all clients
+                    send(client_sockets[i], boolean_arr, word_length * sizeof(int), 0);
+
+                    // Check if the player has finished (either guessed the word in full, or out of guesses)
+                    if (is_word_guessed(server_arr[i], word_length)) {
+                        printf("Player %d: has guessed the word!.\n", i + 1);
+                        game_finished[i] = 1;
+                    }
+
+                    if (guesses_left[i] == 0) {
+                        printf("Player %d is out of guesses\n", i + 1);
+                        game_finished[i] = 1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+int is_word_guessed(int *player_progress, int word_length) {
+    for (int i = 0; i < word_length; i++) {
+        if (player_progress[i] == 0) {  // If any letter is still missing, return false
+            return 0;
+        }
+    }
+    return 1;  // All letters have been guessed
+}
 
 
 
