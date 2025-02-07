@@ -173,8 +173,8 @@ void add_new_player(int server_fd, int *client_sockets, char **player_names, int
     printf("New connection, socket fd: %d, ip: %s, port: %d\n",
            new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 
-    send(new_socket, "Welcome to the game! Please enter your name:\n",
-         strlen("Welcome to the game! Please enter your name:\n"), 0);
+    // send(new_socket, "Welcome to the game! Please enter your name:\n",
+    //      strlen("Welcome to the game! Please enter your name:\n"), 0);
 
     // Store the client socket
     for (int i = 0; i < PLAYER_COUNT; i++) {
