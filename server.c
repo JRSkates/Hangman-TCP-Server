@@ -10,7 +10,7 @@
 
 // Server Configuration Constants
 #define PORT 8080         // The port number the server listens on
-#define PLAYER_COUNT 2  // Maximum number of players allowed in the game
+#define PLAYER_COUNT 4  // Maximum number of players allowed in the game
 #define MAX_GUESSES 6     // Maximum wrong guesses allowed per player
 
 // Function Declarations
@@ -18,10 +18,8 @@ int create_server(int player_count);
 void add_new_player(int server_fd, int *client_sockets, char **player_names, int *name_received, int *connections_pending_name_input);
 void handle_client_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *connections_pending_name_input);
 void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players);
-void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds);
+void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds, char **player_names);
 int is_word_guessed(int *player_progress, int word_length);
-void send_game_state(int client_socket, int *server_arr, int guesses_left, int word_length);
-
 
 // Global word for all clients to guess
 char goal_word[] = "HELLO"; // Example word
@@ -98,24 +96,11 @@ int main(void) {
 
 
     // Main Game loop
-
-    play_hangman(client_sockets, connected_players, goal_word, &readfds);
+    play_hangman(client_sockets, connected_players, goal_word, &readfds, player_names);
 
 
 
     /* *** TO DO ***
-    void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds)
-    Handles the core gameplay loop.
-    Receives guesses, updates server_arr, tracks progress.
-
-    int is_word_guessed(int *player_progress, int word_length)   
-    Checks if a player has correctly guessed all letters.
-
-    void send_game_state(int client_socket, int *server_arr, int guesses_left, int word_length)
-    Sends progress (boolean_arr) to the client.
-
-
-
     Steps to Implement the Guessing Logic:
 
     Loop Until Each Client Finishes
@@ -323,7 +308,7 @@ void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, 
 }
 
 
-void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds) {
+void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds, char **player_names) {
     int word_length = strlen(goal_word);
     int guesses_left[connected_players]; // Stores remaining guesses for each player (associated by index position)
     int server_arr[connected_players][word_length]; // Nested tracking arrays for each clients progress when guessing the word
@@ -382,8 +367,42 @@ void play_hangman(int *client_sockets, int connected_players, char *goal_word, f
             if (FD_ISSET(sd, readfds)) {
                 memset(&guess, 0, sizeof(guess));
                 int valread = recv(sd, &guess, sizeof(guess), 0);
+                if (valread == 0) {
+                    printf("Player %d (Socket %d) disconnected during the game.\n", i + 1, sd);
+                    close(sd);
+                    client_sockets[i] = 0;
 
-                if (valread > 0) { 
+                    // Shift all remaining players down
+                    for (int j = i; j < connected_players - 1; j++) {
+                        client_sockets[j] = client_sockets[j + 1];
+                        player_names[j] = player_names[j + 1];
+                        guesses_left[j] = guesses_left[j + 1];
+                        game_finished[j] = game_finished[j + 1];
+
+                        // Copy nested server_arr state
+                        memcpy(server_arr[j], server_arr[j + 1], word_length * sizeof(int));
+                    }
+
+                    // Clear the last slot
+                    client_sockets[connected_players - 1] = 0;
+                    player_names[connected_players - 1] = NULL;
+                    guesses_left[connected_players - 1] = 0;
+                    game_finished[connected_players - 1] = 1; // Mark as finished
+
+                    memset(server_arr[connected_players - 1], 0, word_length * sizeof(int));
+
+                    // Reduce the player count
+                    connected_players--;
+
+                    // Reduce active players count for the loop condition
+                    active_players--;
+
+                    // Adjust loop counter since we shifted elements
+                    i--;
+                    continue;
+                } 
+                
+                else if (valread > 0) { 
                     guess = toupper(guess); // Convert input to upper case
 
                     // Ignore newline and carriage return characters
