@@ -101,31 +101,13 @@ int main(void) {
 
 
     /* *** TO DO ***
-    Steps to Implement the Guessing Logic:
+    Receive final scores from all clients
 
-    Loop Until Each Client Finishes
-    A client finishes when they either:
-    Guess all letters in the word (server_arr[i] is all 1s)
-    Run out of guesses_left
-    The server should track this individually for each player.
+    Format the final scores
 
-    Receive Guesses from Clients
-    Clients will send a single character.
-    The server will validate the input (only accept letters).
-    The server will check if the letter is in goal_word.
+    Send full leaderboard to all clients
 
-    Process the Guess
-    Compare the guessed letter against each letter in goal_word.
-    If the letter matches, update server_arr[i][pos] = 1 for each occurrence.
-    Otherwise, decrement guesses_left[i].
-
-    Send Feedback to Client
-    Send the boolean_arr[i] array so the client knows how successful their last guess was.
-
-    Check for End Conditions
-    If server_arr[i] is all 1s → Client won.
-    If guesses_left[i] == 0 → Client lost.
-    If all clients finish → Move to the next phase (leaderboard).
+    Program ends
     */
 
 
@@ -275,7 +257,10 @@ void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, 
                         ready_players++;
                     }
                 } else if (valread == 0) {  // Player disconnected before readying up
-                    printf("Player %d (Socket %d) disconnected before readying up.\n", i + 1, sd);
+                    printf("Player %d (Socket %d) disconnected before readying up.\n", 
+                        i + 1, sd);
+                    printf("Player numbers above Player %d will move down (Player %d is now Player %d etc)\n",
+                        i + 1, i + 2, i + 1);
                     close(sd);
                     client_sockets[i] = 0;  // Free the slot
 
@@ -368,7 +353,10 @@ void play_hangman(int *client_sockets, int connected_players, char *goal_word, f
                 memset(&guess, 0, sizeof(guess));
                 int valread = recv(sd, &guess, sizeof(guess), 0);
                 if (valread == 0) {
-                    printf("Player %d (Socket %d) disconnected during the game.\n", i + 1, sd);
+                    printf("Player %d (Socket %d) disconnected during the game.\n", 
+                        i + 1, sd);
+                    printf("Player numbers above Player %d will move down (Player %d is now Player %d etc)\n",
+                        i + 1, i + 2, i + 1);
                     close(sd);
                     client_sockets[i] = 0;
 
@@ -445,7 +433,7 @@ void play_hangman(int *client_sockets, int connected_players, char *goal_word, f
 
                     // Check if the player has finished (either guessed the word in full, or out of guesses)
                     if (is_word_guessed(server_arr[i], word_length)) {
-                        printf("Player %d: has guessed the word!.\n", i + 1);
+                        printf("Player %d: has guessed the word!\n", i + 1);
                         game_finished[i] = 1;
                     }
 
