@@ -72,10 +72,10 @@ int main(void) {
         handle_client_input(client_sockets, player_names, name_received, &connected_players, &active_connections);
     }
 
-    // Print final player list for debugging
-    for (int i = 0; i < connected_players; i++) {
-        printf("Player %d: Socket %d, Name: %s\n", i + 1, client_sockets[i], player_names[i]);
-    }
+    // Print player list for debugging
+    // for (int i = 0; i < connected_players; i++) {
+    //     printf("Player %d: Socket %d, Name: %s\n", i + 1, client_sockets[i], player_names[i]);
+    // }
 
     // Send ready-up message to all players
     char ready_message[] = "All players have entered their names. Ready up by entering 'r'\n";
@@ -87,9 +87,16 @@ int main(void) {
     handle_ready_up(client_sockets, &readfds, player_names, &connected_players);
 
     // Print final player list for debugging
-    for (int i = 0; i < connected_players; i++) {
-        printf("Player %d: Socket %d, Name: %s\n", i + 1, client_sockets[i], player_names[i]);
-    }
+    // for (int i = 0; i < connected_players; i++) {
+    //     printf("Player %d: Socket %d, Name: %s\n", i + 1, client_sockets[i], player_names[i]);
+    // }
+
+
+
+
+
+
+    
 
     // Close all client sockets and free allocated memory
     for (int i = 0; i < PLAYER_COUNT; i++) {
