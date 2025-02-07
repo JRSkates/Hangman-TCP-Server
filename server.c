@@ -14,6 +14,7 @@
 int create_server(int player_count);
 void add_new_player(int server_fd, int *client_sockets, char **player_names, int *name_received, int *active_connections);
 void handle_client_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *active_connections);
+void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players);
 
 int main(void) {
     int client_sockets[PLAYER_COUNT] = {0}; // Stores active client sockets
@@ -66,6 +67,16 @@ int main(void) {
         // Handle player name input asynchronously
         handle_client_input(client_sockets, player_names, name_received, &connected_players, &active_connections);
     }
+
+    // Send the ready-up message to all players
+    char ready_message[1024] = "All players have entered their names. Ready up by entering 'r'\n";
+    for (int i = 0; i < PLAYER_COUNT; i++) {
+        send(client_sockets[i], ready_message, strlen(ready_message), 0);
+    }
+
+    // Wait for all players to send 'r'
+    handle_ready_up(client_sockets, &readfds, player_names, &connected_players);
+
 
     // Print players and sockets for debugging
     for (int i = 0; i < PLAYER_COUNT; i++) {
@@ -173,3 +184,63 @@ int create_server(int player_count) {
 
     return server_fd;
 }
+
+void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players) {
+    int ready_players = 0;
+    char buffer[10];
+
+    printf("Waiting for all players to ready up...\n");
+
+    while (ready_players < PLAYER_COUNT) {
+        FD_ZERO(readfds);
+
+        int max_sd = 0;
+        for (int i = 0; i < PLAYER_COUNT; i++) {
+            if (client_sockets[i] > 0) {
+                FD_SET(client_sockets[i], readfds);
+                if (client_sockets[i] > max_sd) {
+                    max_sd = client_sockets[i];
+                }
+            }
+        }
+
+        if (select(max_sd + 1, readfds, NULL, NULL, NULL) < 0) {
+            perror("Select failed");
+            exit(EXIT_FAILURE);
+        }
+
+        for (int i = 0; i < PLAYER_COUNT; i++) {
+            int sd = client_sockets[i];
+
+            if (FD_ISSET(sd, readfds)) {
+                memset(buffer, 0, sizeof(buffer));
+                int valread = recv(sd, buffer, sizeof(buffer), 0);
+
+                if (valread > 0) {
+                    if (buffer[0] == 'r') {
+                        printf("Player %d is ready!\n", i);
+                        ready_players++;
+                    }
+                } else if (valread == 0) {  // Client disconnected before readying up
+                    printf("Player %d (Socket %d) disconnected before readying up.\n", i, sd);
+                    close(sd);
+                    client_sockets[i] = 0;  // Free the slot
+
+                    // Free the player's name and reset their state
+                    free(player_names[i]);
+                    player_names[i] = NULL;
+                    (*connected_players)--;  // Reduce total connected players
+
+                    // Reduce `ready_players` count if they had already sent 'r'
+                    if (buffer[0] == 'r') {
+                        ready_players--;
+                    }
+                }
+            }
+        }
+    }
+
+    printf("All players are ready! Starting the game...\n");
+}
+
+
