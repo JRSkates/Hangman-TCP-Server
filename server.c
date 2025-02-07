@@ -352,6 +352,8 @@ void play_hangman(int *client_sockets, int connected_players, char *goal_word, f
             if (FD_ISSET(sd, readfds)) {
                 memset(&guess, 0, sizeof(guess));
                 int valread = recv(sd, &guess, sizeof(guess), 0);
+
+                // Handle player disconnections
                 if (valread == 0) {
                     printf("Player %d (Socket %d) disconnected during the game.\n", 
                         i + 1, sd);
@@ -390,6 +392,7 @@ void play_hangman(int *client_sockets, int connected_players, char *goal_word, f
                     continue;
                 } 
                 
+                // Handle player guess
                 else if (valread > 0) { 
                     guess = toupper(guess); // Convert input to upper case
 
