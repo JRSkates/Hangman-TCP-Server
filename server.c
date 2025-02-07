@@ -73,6 +73,7 @@ int main(void) {
                     close(reject_socket);
                 }
             }
+            printf("Spaces available: %d\n", PLAYER_COUNT - connections_pending_name_input);
         }
 
         // Handle player name input asynchronously
@@ -80,13 +81,14 @@ int main(void) {
     }
 
     // Send ready-up message to all players
-    char ready_message[] = "All players have entered their names. Ready up by entering 'r'\n";
+    char ready_message[] = "All players have entered their usernames. Ready up by entering 'r'\n";
     for (int i = 0; i < PLAYER_COUNT; i++) {
         send(client_sockets[i], ready_message, strlen(ready_message), 0);
     }
 
     // Wait for all players to send 'r'
     handle_ready_up(client_sockets, &readfds, player_names, &connected_players);
+
 
     // Print final player list for debugging
     // for (int i = 0; i < connected_players; i++) {
@@ -131,7 +133,6 @@ int main(void) {
 int create_server(int player_count) {
     int server_fd;
     struct sockaddr_in address;
-    int opt = 1;
 
     // Create socket
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -222,6 +223,7 @@ void handle_client_name_input(int *client_sockets, char **player_names, int *nam
 // Handle clients readying up, and adjusts if they disconnect during this process
 void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players) {
     int ready_players = 0; // Tracks how many players have sent 'r'
+    int player_ready_check[PLAYER_COUNT] = {0}; // Track which players are readyed up 
     char buffer[10];
 
     printf("Waiting for all players to ready up...\n");
@@ -253,15 +255,16 @@ void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, 
 
                 if (valread > 0) {  // Player sent input
                     if (buffer[0] == 'r') {
+                        player_ready_check[i] = 1;  // Mark this player as ready
                         printf("Player %d - %s is ready!\n", i + 1, player_names[i]);
                         ready_players++;
                     }
                 } else if (valread == 0) {  // Player disconnected before readying up
-                    printf("Player %d (Socket %d) disconnected before readying up.\n", 
+                    printf("Player %d (Socket %d) disconnected.\n", 
                         i + 1, sd);
                     printf("Player numbers above Player %d will move down (Player %d is now Player %d etc)\n",
                         i + 1, i + 2, i + 1);
-                    close(sd);
+                    
                     client_sockets[i] = 0;  // Free the slot
 
                     // Shift all players down to fill the gap
@@ -278,12 +281,15 @@ void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, 
                     (*connected_players)--;
 
                     // Adjust ready_players count **ONLY IF** the disconnected player was already ready
-                    if (ready_players > 0 && buffer[0] == 'r') {
+                    if (ready_players > 0 && player_ready_check[i] == 1) {
+                        player_ready_check[i] = 0;
                         ready_players--;
                     }
 
                     // Since a player left, we must update the loop bounds correctly
                     i--;
+
+                    close(sd);
                 }
             }
         }
