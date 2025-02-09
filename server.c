@@ -299,6 +299,15 @@ void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, 
 }
 
 
+// Core Hangman Loop
+
+// ***************POTENTIAL BUG*************************
+// No safety to handle if a player disconnects after their game is over
+// checks if game is finished during guess processing loop 
+// skips that users loop with continue if they have finished
+// condition to handle disconnect is later in the loop - so would likely be missed
+// *****************************************************
+
 void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds, char **player_names) {
     int word_length = strlen(goal_word);
     int guesses_left[connected_players]; // Stores remaining guesses for each player (associated by index position)
@@ -350,7 +359,9 @@ void play_hangman(int *client_sockets, int connected_players, char *goal_word, f
         // Process guesses for each player
         for (int i = 0; i < connected_players; i++) {
             int sd = client_sockets[i];
-
+            
+            // *** May cause issues if finished
+            // user disconnects ***
             if (game_finished[i]) {
                 continue;
             }
@@ -365,7 +376,7 @@ void play_hangman(int *client_sockets, int connected_players, char *goal_word, f
                         i + 1, sd);
                     printf("Player numbers above Player %d will move down (Player %d is now Player %d etc)\n",
                         i + 1, i + 2, i + 1);
-                    close(sd);
+                    close(sd); // *** May need to move this close down ***
                     client_sockets[i] = 0;
 
                     // Shift all remaining players down
