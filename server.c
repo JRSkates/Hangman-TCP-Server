@@ -10,7 +10,7 @@
 
 // Server Configuration Constants
 #define PORT 8080         // The port number the server listens on
-#define PLAYER_COUNT 3 // Maximum number of players allowed in the game
+#define PLAYER_COUNT 2 // Maximum number of players allowed in the game
 #define MAX_GUESSES 6     // Maximum wrong guesses allowed per player
 
 // Enums for function completion or failure
@@ -25,6 +25,7 @@ void play_hangman(int *client_sockets, int connected_players, char *goal_word, f
 int is_word_guessed(int *player_progress, int word_length);
 void format_and_send_leaderboard(int *client_sockets, int connected_players, int *leaderboard, char * goal_word, fd_set *readfds, char **player_names);
 void send_leaderboard_to_all(int *client_sockets, int connected_players, int *leaderboard, char *goal_word);
+void flush_socket(int sd);
 // void clear(void);
 
 // Global word for all clients to guess
@@ -34,7 +35,7 @@ int main(void) {
     int client_sockets[PLAYER_COUNT] = {0}; // Stores active client sockets
     char *player_names[PLAYER_COUNT] = {0}; // Stores player names
     int name_received[PLAYER_COUNT] = {0};  // Tracks if a player has entered their name
-    int leaderboard[PLAYER_COUNT] = {-1}; // Stores final scores for all clients/players
+    int leaderboard[PLAYER_COUNT] = {0}; // Stores final scores for all clients/players
     int server_fd;
     struct sockaddr_in address;
     socklen_t addr_len = sizeof(address);
@@ -97,31 +98,24 @@ int main(void) {
     handle_ready_up(client_sockets, &readfds, player_names, &connected_players);
 
 
-    // Print final player list for debugging
-    // for (int i = 0; i < connected_players; i++) {
-    //     printf("Player %d: Socket %d, Name: %s\n", i + 1, client_sockets[i], player_names[i]);
-    // }
-
-
-
     // Main Game loop
     play_hangman(client_sockets, connected_players, goal_word, &readfds, player_names);
+
+    // Flush any remaining input from all players before proceeding to leaderboard
+    for (int i = 0; i < connected_players; i++) {
+        if (client_sockets[i] > 0) {
+            flush_socket(client_sockets[i]);
+        }
+    }
 
     // Receive final scores in formatted string: "Username:Score"
     format_and_send_leaderboard(client_sockets, connected_players, leaderboard, goal_word, &readfds, player_names);
 
     /*** TO DO ***
-    Receive final scores from all clients
+    Debug leaderboard once client short int final score implemented
 
-    Format the final scores
-
-    Send full leaderboard to all clients
-
-    Program ends
+    Cannot work on it fully until I'm receiving that data from the client as intended
     */
-
-
-
 
     //==================================================================================================================================
 
@@ -474,12 +468,14 @@ void play_hangman(int *client_sockets, int connected_players, char *goal_word, f
                     // Check if the player has finished (either guessed the word in full, or out of guesses)
                     if (is_word_guessed(server_arr[i], word_length)) {
                         printf("Player %d: has guessed the word!\n", i + 1);
+                        fflush(stdin);
                         game_finished[i] = 1;
                         finished_players++;
                     }
 
                     if (guesses_left[i] == 0) {
                         printf("Player %d is out of guesses\n", i + 1);
+                        fflush(stdin);
                         game_finished[i] = 1;
                         finished_players++;
                     }
@@ -610,14 +606,23 @@ void format_and_send_leaderboard(int *client_sockets, int connected_players, int
 
     // Debug: Print the leaderboard for server reference
     printf("Final leaderboard sent to all players:\n%s", leaderboard_buffer);
-    clear();
+    //clear();
 }
 
 // void clear (void) {
 //     while ( getchar() != '\n' );
 // }
 
-
+void flush_socket(int sd) {
+    char flush_buffer[128];  // Temporary buffer for clearing input
+    int bytes_read;
+    
+    // Use MSG_DONTWAIT to read and discard any leftover data
+    while ((bytes_read = recv(sd, flush_buffer, sizeof(flush_buffer), MSG_DONTWAIT)) > 0) {
+        // Debugging (Optional)
+        printf("Flushed %d bytes from Player socket %d\n", bytes_read, sd);
+    }
+}
 
 
 
