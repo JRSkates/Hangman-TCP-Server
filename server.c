@@ -10,8 +10,11 @@
 
 // Server Configuration Constants
 #define PORT 8080         // The port number the server listens on
-#define PLAYER_COUNT 4  // Maximum number of players allowed in the game
+#define PLAYER_COUNT 2 // Maximum number of players allowed in the game
 #define MAX_GUESSES 6     // Maximum wrong guesses allowed per player
+
+// Enums for function completion or failure
+enum { SUCCESS=0, FAILURE=1 };
 
 // Function Declarations
 int create_server(int player_count);
@@ -20,6 +23,8 @@ void handle_client_name_input(int *client_sockets, char **player_names, int *nam
 void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players);
 void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds, char **player_names);
 int is_word_guessed(int *player_progress, int word_length);
+void format_and_send_leaderboard(int *client_sockets, int connected_players, int *leaderboard, char * goal_word, fd_set *readfds, char **player_names);
+void send_leaderboard_to_all(int *client_sockets, int connected_players, int *leaderboard, char *goal_word);
 
 // Global word for all clients to guess
 char goal_word[] = "HELLO"; // Example word
@@ -28,6 +33,7 @@ int main(void) {
     int client_sockets[PLAYER_COUNT] = {0}; // Stores active client sockets
     char *player_names[PLAYER_COUNT] = {0}; // Stores player names
     int name_received[PLAYER_COUNT] = {0};  // Tracks if a player has entered their name
+    int leaderboard[PLAYER_COUNT] = {-1}; // Stores final scores for all clients/players
     int server_fd;
     struct sockaddr_in address;
     socklen_t addr_len = sizeof(address);
@@ -100,9 +106,10 @@ int main(void) {
     // Main Game loop
     play_hangman(client_sockets, connected_players, goal_word, &readfds, player_names);
 
+    // Receive final scores in formatted string: "Username:Score"
+    format_and_send_leaderboard(client_sockets, connected_players, leaderboard, goal_word, &readfds, player_names);
 
-
-    /* *** TO DO ***
+    /*** TO DO ***
     Receive final scores from all clients
 
     Format the final scores
@@ -448,6 +455,11 @@ void play_hangman(int *client_sockets, int connected_players, char *goal_word, f
                         printf("Player %d: correct guess.\n", i + 1);
                     }
 
+                    for (int j = 0; j < word_length; j++) {
+                        printf("%d ", boolean_arr[j]);
+                    }
+                    printf("]\n");
+
                     // Send the updated boolean array with guessed letters to all clients
                     send(client_sockets[i], boolean_arr, word_length * sizeof(int), 0);
 
@@ -475,6 +487,119 @@ int is_word_guessed(int *player_progress, int word_length) {
     }
     return 1;  // All letters have been guessed
 }
+
+void format_and_send_leaderboard(int *client_sockets, int connected_players, int *leaderboard, char * goal_word, fd_set *readfds, char **player_names) {
+    int final_scores_received = 0;
+
+    printf("Waiting for players to send final scores...\n");
+
+    while (final_scores_received < connected_players) {
+        FD_ZERO(readfds);
+        int max_sd = 0;
+        int active_players = 0;
+
+        // Add active sockets to read set
+        for (int i = 0; i < connected_players; i++) {
+            if (client_sockets[i] > 0) {
+                FD_SET(client_sockets[i], readfds);
+                if (client_sockets[i] > max_sd) {
+                    max_sd = client_sockets[i];
+                }
+                active_players++;
+            }
+        }
+
+        // If all players are disconnected, exit
+        if (active_players == 0) {
+            printf("All players have disconnected. Exiting leaderboard...\n");
+            break;
+        }
+
+        // Wait for data from any player
+        int activity = select(max_sd + 1, readfds, NULL, NULL, NULL);
+        if (activity < 0) {
+            perror("Select failed");
+            exit(EXIT_FAILURE);
+        }
+
+        // Process received scores
+        for (int i = 0; i < connected_players; i++) {
+            int sd = client_sockets[i];
+
+            if (FD_ISSET(sd, readfds)) {
+                uint16_t score_network = 0; // 16-bit variable to store network byte order data
+                int valread = recv(sd, &score_network, sizeof(score_network), 0);
+
+                if (valread > 0) {
+                    int score = ntohs(score_network); // Convert from network byte order to host byte order
+                    final_scores_received++;
+                    leaderboard[i] = score;
+                    printf("Player %d: received final score: %d\n", i + 1, score);
+                } else if (valread == 0) {
+                    printf("Player %d (Socket %d) disconnected during the leaderboard.\n", 
+                        i + 1, sd);
+                    printf("Player numbers above Player %d will move down (Player %d is now Player %d etc)\n",
+                        i + 1, i + 2, i + 1);
+                    close(sd); // *** May need to move this close down ***
+                    client_sockets[i] = 0;
+
+                    // Shift all remaining players down
+                    for (int j = i; j < connected_players - 1; j++) {
+                        client_sockets[j] = client_sockets[j + 1];
+                        player_names[j] = player_names[j + 1];
+                        leaderboard[j] = leaderboard[j + 1];
+
+                        // Copy nested server_arr state
+                        // memcpy(server_arr[j], server_arr[j + 1], word_length * sizeof(int));
+                    }
+
+                    // Clear the last slot
+                    client_sockets[connected_players - 1] = 0;
+                    player_names[connected_players - 1] = NULL;
+                    leaderboard[connected_players - 1] = 0;
+
+                    // Reduce the player count
+                    connected_players--;
+
+                    // Reduce active players count for the loop condition
+                    active_players--;
+
+                    // Adjust loop counter since we shifted elements
+                    i--;
+                    continue;
+                }
+            }
+        }
+    }
+
+    char leaderboard_buffer[1024]; // Large enough buffer to hold all leaderboard entries
+    memset(leaderboard_buffer, 0, sizeof(leaderboard_buffer));
+
+    // Format the leaderboard as a single buffer
+    for (int i = 0; i < connected_players; i++) {
+        if (player_names[i] != NULL && client_sockets[i] > 0) {  // Ensure valid player
+            snprintf(leaderboard_buffer + strlen(leaderboard_buffer), 
+                     sizeof(leaderboard_buffer) - strlen(leaderboard_buffer), 
+                     "%s:%d\n", player_names[i], leaderboard[i]);
+        } else {
+            snprintf(leaderboard_buffer + strlen(leaderboard_buffer), 
+                     sizeof(leaderboard_buffer) - strlen(leaderboard_buffer), 
+                     "Disconnected:0\n"); // Handle DC players
+        }
+    }
+
+    // Send the entire leaderboard buffer to all active clients
+    for (int i = 0; i < connected_players; i++) {
+        if (client_sockets[i] > 0) { // Ensure the client is still connected
+            send(client_sockets[i], leaderboard_buffer, strlen(leaderboard_buffer) + 1, 0);
+        }
+    }
+
+    // Debug: Print the leaderboard for server reference
+    printf("Final leaderboard sent to all players:\n%s", leaderboard_buffer);
+}
+
+
 
 
 
