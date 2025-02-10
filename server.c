@@ -10,7 +10,7 @@
 
 // Server Configuration Constants
 #define PORT 8080         // The port number the server listens on
-#define PLAYER_COUNT 2 // Maximum number of players allowed in the game
+#define PLAYER_COUNT 1 // Maximum number of players allowed in the game
 #define MAX_GUESSES 6     // Maximum wrong guesses allowed per player
 
 // Enums for function completion or failure
@@ -527,14 +527,15 @@ void format_and_send_leaderboard(int *client_sockets, int connected_players, int
             int sd = client_sockets[i];
 
             if (FD_ISSET(sd, readfds)) {
-                uint16_t score_network = 0; // 16-bit variable to store network byte order data
-                int valread = recv(sd, &score_network, sizeof(score_network), 0);
-
+                short int score = 0; 
+                int valread = recv(sd, &score, sizeof(short int), MSG_WAITALL);
+                printf("Value read: %d", valread);
+                printf("Score read: %d", score);
                 if (valread > 0) {
-                    int score = ntohs(score_network); // Convert from network byte order to host byte order
+                    short int final_score = ntohs(score); // Convert from network byte order to host byte order
+                    leaderboard[i] = final_score;
                     final_scores_received++;
-                    leaderboard[i] = score;
-                    printf("Player %d: received final score: %d\n", i + 1, score);
+                    printf("Player %d: received final score: %d\n", i + 1, final_score);
                 } else if (valread == 0) {
                     printf("Player %d (Socket %d) disconnected during the leaderboard.\n", 
                         i + 1, sd);
