@@ -7,10 +7,11 @@
 #include <sys/socket.h> // Socket programming functions
 #include <sys/select.h> // Multiplexing functions (select, FD_SET, etc.)
 #include <ctype.h>
+#include <time.h>
 
 // Server Configuration Constants
 #define PORT 8080         // The port number the server listens on
-#define PLAYER_COUNT 2 // Maximum number of players allowed in the game
+#define PLAYER_COUNT 1 // Maximum number of players allowed in the game
 #define MAX_GUESSES 8     // Maximum wrong guesses allowed per player
 
 // Enums for function completion or failure
@@ -26,12 +27,14 @@ int is_word_guessed(int *player_progress, int word_length);
 void format_and_send_leaderboard(int *client_sockets, int connected_players, int *leaderboard, char * goal_word, fd_set *readfds, char **player_names);
 void send_leaderboard_to_all(int *client_sockets, int connected_players, int *leaderboard, char *goal_word);
 void flush_socket(int sd);
+void random_goal_word();
 // void clear(void);
 
-// Global word for all clients to guess
-char goal_word[] = "HELLO"; // Example word
+// Global pointer to dynamically allocated goal word
+char *goal_word = NULL; 
 
 int main(void) {
+    srand(time(NULL)); // Ensure randomness
     int client_sockets[PLAYER_COUNT] = {0}; // Stores active client sockets
     char *player_names[PLAYER_COUNT] = {0}; // Stores player names
     int name_received[PLAYER_COUNT] = {0};  // Tracks if a player has entered their name
@@ -39,6 +42,10 @@ int main(void) {
     int server_fd;
     struct sockaddr_in address;
     socklen_t addr_len = sizeof(address);
+
+    // Assign goal_word randomly from pool of words
+    random_goal_word();
+    printf("Goal Word: %s\n", goal_word);
 
     // Create the server socket and start listening
     server_fd = create_server(PLAYER_COUNT);
@@ -126,6 +133,9 @@ int main(void) {
             free(player_names[i]);
         }
     }
+
+    // Free allocated memory before exiting
+    free(goal_word);
 
     close(server_fd); // Close the server socket
     return 0;
@@ -624,5 +634,71 @@ void flush_socket(int sd) {
     }
 }
 
+void random_goal_word() {
+    char *words[] = {
+    "MOUNTAIN", "RIVER", "OCEAN", "FOREST", "DESERT", "VALLEY", "PRAIRIE", "JUNGLE", "TUNDRA", "VOLCANO",
+    "ISLAND", "BEACH", "HARBOR", "CANYON", "PLATEAU", "SUMMIT", "GLACIER", "CLIFF", "WATERFALL", "HORIZON",
+    "SUNRISE", "SUNSET", "THUNDER", "LIGHTNING", "RAINBOW", "WHIRLPOOL", "SANDSTORM", "TORNADO", "AVALANCHE", "EARTHQUAKE",
+    "MEADOW", "GARDEN", "ORCHARD", "VINEYARD", "PASTURE", "FARMLAND", "WILDERNESS", "GROVE", "SWAMP", "MARSH",
+    "SCHOOL", "COLLEGE", "LIBRARY", "MUSEUM", "GALLERY", "STADIUM", "THEATER", "HOSPITAL", "STATION", "UNIVERSITY",
+    "AIRPLANE", "HELICOPTER", "SUBMARINE", "SCOOTER", "BICYCLE", "MOTORCYCLE", "BUS", "TRAM", "SUBWAY", "TRAIN",
+    "POLICE", "FIREMAN", "DOCTOR", "NURSE", "TEACHER", "LAWYER", "JUDGE", "PILOT", "ENGINEER", "SCIENTIST",
+    "ARTIST", "MUSICIAN", "PAINTER", "SCULPTOR", "WRITER", "AUTHOR", "DIRECTOR", "ACTOR", "DANCER", "SINGER",
+    "STUDENT", "PROFESSOR", "LIBRARIAN", "MANAGER", "WORKER", "CLERK", "CASHIER", "WAITER", "BARISTA", "CHEF",
+    "COMPUTER", "KEYBOARD", "MONITOR", "PRINTER", "SCANNER", "ROUTER", "MODEM", "SPEAKER", "TABLET", "CAMERA",
+    "SOFTWARE", "HARDWARE", "NETWORK", "DATABASE", "BROWSER", "PROGRAM", "SYSTEM", "SERVER", "BACKUP", "VIRTUAL",
+    "PYTHON", "JAVA", "CSHARP", "GOLANG", "KOTLIN", "SWIFT", "BINARY", "ARRAY", "VECTOR", "POINTER",
+    "FICTION", "NOVEL", "POETRY", "DRAMA", "COMEDY", "TRAGEDY", "BIOGRAPHY", "MYSTERY", "FANTASY", "ROMANCE",
+    "JUSTICE", "FREEDOM", "HONESTY", "INTEGRITY", "LOYALTY", "COMPASSION", "PATIENCE", "COURAGE", "RESPECT", "WISDOM",
+    "BIOLOGY", "CHEMISTRY", "PHYSICS", "GEOLOGY", "ASTRONOMY", "BOTANY", "ZOOLOGY", "ECOLOGY", "GENETICS", "MICROBES",
+    "ALGORITHM", "EQUATION", "FORMULA", "THEOREM", "CALCULUS", "GEOMETRY", "ALGEBRA", "STATISTICS", "INTEGRAL", "MATRIX",
+    "ROBOTICS", "CYBERNETICS", "NANOTECH", "QUANTUM", "GRAVITY", "RELATIVITY", "TELESCOPE", "MICROSCOPE", "SATELLITE", "PROBE",
+    "GALAXY", "PLANET", "COMET", "ASTEROID", "METEOR", "NEBULA", "QUASAR", "PULSAR", "BLACKHOLE",
+    "STADIUM", "BALLPARK", "COURT", "ARENA", "GYM", "TRACK", "FIELD", "RINK", "POOL", "RACEWAY",
+    "SOCCER", "BASKETBALL", "BASEBALL", "FOOTBALL", "HOCKEY", "VOLLEYBALL", "TENNIS", "CRICKET", "RUGBY", "GOLF",
+    "BALLET", "OPERA", "CONCERT", "FESTIVAL", "PARADE", "EXHIBIT", "CIRCUS", "PERFORMANCE", "COMPETITION", "AUDITION",
+    "GUITAR", "PIANO", "VIOLIN", "DRUMS", "TRUMPET", "SAXOPHONE", "FLUTE", "CELLO", "TROMBONE", "CLARINET",
+    "IMAGINE", "CREATE", "INVENT", "DESIGN", "SOLVE", "ANALYZE", "EXPLORE", "DISCOVER", "DEVELOP", "BUILD",
+    "DIALOGUE", "CHARACTER", "SETTING", "THEME", "PLOT", "CONFLICT", "CLIMAX", "RESOLUTION", "NARRATIVE", "SCENE",
+    "PROBLEM", "SOLUTION", "METHOD", "PROCESS", "HYPOTHESIS", "EXPERIMENT", "RESULT", "CONCLUSION", "EVIDENCE", "DATA",
+    "DINOSAUR", "MAMMAL", "REPTILE", "INSECT", "AMPHIBIAN", "SPECIES", "ORGANISM", "ECOSYSTEM", "HABITAT", "PREDATOR",
+    "ECONOMY", "MARKET", "CURRENCY", "FINANCE", "INVESTMENT", "TRADE", "INDUSTRY", "BUSINESS", "CAPITAL", "TAXES",
+    "REPUBLIC", "MONARCHY", "DEMOCRACY", "DICTATOR", "SENATOR", "PRESIDENT", "GOVERNOR", "MAYOR", "MINISTER", "JUDGE",
+    "CULTURE", "SOCIETY", "COMMUNITY", "TRADITION", "RITUAL", "CUSTOM", "LANGUAGE", "RELIGION", "BELIEF", "VALUES",
+    "HISTORY", "TIMELINE", "DYNASTY", "EMPIRE", "KINGDOM", "REVOLUTION", "WARFARE", "BATTLE", "TREATY", "INDEPENDENCE",
+    "PROGRAM", "PROJECT", "ASSIGNMENT", "TASK", "DEADLINE", "GOAL", "STRATEGY", "MEETING", "DISCUSSION", "PLAN",
+    "ROBOT", "DRONE", "MACHINE", "AUTOMATION", "SENSOR", "MICROCHIP", "CIRCUIT", "GADGET", "INTERFACE", "CONTROLLER",
+    "COMPANY", "STARTUP", "CORPORATION", "AGENCY", "BUREAU", "OFFICE", "BRANCH", "FIRM", "SUBSIDIARY", "ENTERPRISE",
+    "RESOURCE", "SUPPLY", "DISTRIBUTION", "DEMAND", "MANAGEMENT", "INVENTORY", "PRODUCTION", "OPERATION", "MAINTENANCE", "LOGISTICS",
+    "LEADER", "TEAM", "GROUP", "COLLABORATE", "NEGOTIATE", "COORDINATE", "SUPPORT", "ASSIST", "CONSULT", "EVALUATE",
+    "WEBSITE", "BLOG", "FORUM", "SOCIAL", "PLATFORM", "MEDIA", "APPLICATION", "CONTENT", "SERVICE", "SUPPORT",
+    "EARTH", "PLANET", "MARS", "VENUS", "JUPITER", "SATURN", "MERCURY", "URANUS", "NEPTUNE", "PLUTO",
+    "APPLE", "BANANA", "GRAPES", "ORANGE", "MELON", "MANGO", "PEACH", "CHERRY", "PEAR", "PLUM",
+    "DREAM", "IMAGINE", "CREATE", "WONDER", "DISCOVER", "EXPLORE", "BUILD", "INVENT", "LEARN", "GROW",
+    "SMILE", "LAUGH", "CRY", "SIGH", "YAWN", "SHOUT", "WHISPER", "SCREAM", "TALK", "SING",
+    "RUN", "JUMP", "WALK", "DANCE", "SWIM", "CLIMB", "CRAWL", "SLIDE", "STRETCH", "SPIN",
+    "SHIRT", "PANTS", "JACKET", "SCARF", "GLOVES", "HAT", "SHOES", "SOCKS", "BELT", "BOOTS",
+    "PHONE", "TABLET", "LAPTOP", "CAMERA", "REMOTE", "SPEAKER", "HEADPHONES", "BATTERY", "CHARGER", "MONITOR",
+    "PENCIL", "ERASER", "MARKER", "NOTEBOOK", "RULER", "SCISSORS", "GLUE", "TAPE", "PAPER", "FOLDER"
+    };
+    const int WORDS_COUNT = sizeof(words) / sizeof(words[0]);
 
+    // Free any previously allocated memory
+    if (goal_word != NULL) {
+        free(goal_word);
+    }
+
+    // Select a random word
+    char *selected_word = words[rand() % WORDS_COUNT];
+
+    // Allocate exact memory needed
+    goal_word = malloc(strlen(selected_word) + 1); // +1 for null terminator
+    if (goal_word == NULL) {
+        perror("Memory allocation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Copy the word into dynamically allocated memory
+    strcpy(goal_word, selected_word);
+}
 
