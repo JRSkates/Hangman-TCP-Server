@@ -19,7 +19,7 @@
 
 // Function Declarations
 int create_server(int player_count);
-void add_new_player(int server_fd, int *client_sockets, char **player_names, int *name_received, int *connections_pending_name_input);
+void add_new_player(int server_fd, int *client_sockets, int *connections_pending_name_input);
 void handle_client_name_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *connections_pending_name_input);
 void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players);
 void play_hangman(int *client_sockets, int connected_players, char *goal_word, fd_set *readfds, char **player_names);
@@ -48,7 +48,6 @@ int main(void) {
 
     // Create the server socket and start listening
     server_fd = create_server(PLAYER_COUNT);
-    printf("Waiting for players...\n");
 
     int connected_players = 0;  // Tracks players who have entered names and fully connected to the game
     int connections_pending_name_input = 0; // Tracks active sockets that haven't sent their name
@@ -68,6 +67,8 @@ int main(void) {
             if (sd > max_sd) max_sd = sd;
         }
 
+        printf("Waiting for players...\n");
+
         // Wait for activity on any socket
         if (select(max_sd + 1, &readfds, NULL, NULL, NULL) < 0) {
             perror("Select failed");
@@ -77,7 +78,8 @@ int main(void) {
         // Accept new players if space is available
         if (FD_ISSET(server_fd, &readfds)) {
             if (connections_pending_name_input < PLAYER_COUNT) {
-                add_new_player(server_fd, client_sockets, player_names, name_received, &connections_pending_name_input);
+                add_new_player(server_fd, client_sockets, &connections_pending_name_input);
+                printf("Spaces available: %d\n", PLAYER_COUNT - connections_pending_name_input);
             } else {
                 // Reject extra connections
                 int reject_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
@@ -86,14 +88,15 @@ int main(void) {
                     send(reject_socket, message, strlen(message), 0);
                     close(reject_socket);
                 }
+                printf("Rejected connection from unknown client as server is full\n");
             }
-            printf("Spaces available: %d\n", PLAYER_COUNT - connections_pending_name_input);
         }
 
         // Handle player name input asynchronously
         handle_client_name_input(client_sockets, player_names, name_received, &connected_players, &connections_pending_name_input);
     }
 
+    printf("Connected players DEBUG: %d\n", connected_players);
     // Send ready-up message to all players
     char ready_message[] = "All players have entered their usernames. Ready up by entering 'r'\n";
     for (int i = 0; i < PLAYER_COUNT; i++) {
@@ -107,10 +110,15 @@ int main(void) {
     play_hangman(client_sockets, connected_players, goal_word, &readfds, player_names);
 
     // Flush any remaining input from all players before proceeding to leaderboard
-    for (int i = 0; i < connected_players; i++) {
-        if (client_sockets[i] > 0) {
-            flush_socket(client_sockets[i]);
-        }
+    // for (int i = 0; i < connected_players; i++) {
+    //     if (client_sockets[i] > 0) {
+    //         flush_socket(client_sockets[i]);
+    //     }
+    // }
+
+    char leaderboard_message[] = "All Players have finished! Generating leaderboard...\n";
+    for (int i = 0; i < PLAYER_COUNT; i++) {
+        send(client_sockets[i], leaderboard_message, strlen(ready_message), 0);
     }
 
     // Receive final scores in formatted string: "Username:Score"
@@ -165,7 +173,7 @@ int create_server(int player_count) {
 
 
 // Accept a new player and store their socket
-void add_new_player(int server_fd, int *client_sockets, char **player_names, int *name_received, int *connections_pending_name_input) {
+void add_new_player(int server_fd, int *client_sockets, int *connections_pending_name_input) {
     struct sockaddr_in address;
     socklen_t addr_len = sizeof(address);
     int new_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
@@ -184,7 +192,6 @@ void add_new_player(int server_fd, int *client_sockets, char **player_names, int
     for (int i = 0; i < PLAYER_COUNT; i++) {
         if (client_sockets[i] == 0) { // Find empty slot
             client_sockets[i] = new_socket;
-            name_received[i] = 0;
             (*connections_pending_name_input)++; // Increment immediately when a socket is accepted
             break;
         }
