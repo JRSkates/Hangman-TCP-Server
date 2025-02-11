@@ -15,7 +15,7 @@
 #define MAX_GUESSES 8     // Maximum wrong guesses allowed per player
 
 // Enums for function completion or failure
-enum { SUCCESS=0, FAILURE=1 };
+// enum { SUCCESS=1, FAILURE=0 };
 
 // Function Declarations
 int create_server(int player_count);
@@ -28,7 +28,6 @@ void format_and_send_leaderboard(int *client_sockets, int connected_players, int
 void send_leaderboard_to_all(int *client_sockets, int connected_players, int *leaderboard, char *goal_word);
 void flush_socket(int sd);
 void random_goal_word();
-// void clear(void);
 
 // Global pointer to dynamically allocated goal word
 char *goal_word = NULL; 
@@ -104,7 +103,6 @@ int main(void) {
     // Wait for all players to send 'r'
     handle_ready_up(client_sockets, &readfds, player_names, &connected_players);
 
-
     // Main Game loop
     play_hangman(client_sockets, connected_players, goal_word, &readfds, player_names);
 
@@ -118,14 +116,6 @@ int main(void) {
     // Receive final scores in formatted string: "Username:Score"
     format_and_send_leaderboard(client_sockets, connected_players, leaderboard, goal_word, &readfds, player_names);
 
-    /*** TO DO ***
-    Debug leaderboard once client short int final score implemented
-
-    Cannot work on it fully until I'm receiving that data from the client as intended
-    */
-
-    //==================================================================================================================================
-
     // Close all client sockets and free allocated memory
     for (int i = 0; i < PLAYER_COUNT; i++) {
         if (client_sockets[i] > 0) {
@@ -136,6 +126,7 @@ int main(void) {
 
     // Free allocated memory before exiting
     free(goal_word);
+    goal_word = NULL;
 
     close(server_fd); // Close the server socket
     return 0;
@@ -619,10 +610,6 @@ void format_and_send_leaderboard(int *client_sockets, int connected_players, int
     //clear();
 }
 
-// void clear (void) {
-//     while ( getchar() != '\n' );
-// }
-
 void flush_socket(int sd) {
     char flush_buffer[128];  // Temporary buffer for clearing input
     int bytes_read;
@@ -636,23 +623,8 @@ void flush_socket(int sd) {
 
 void random_goal_word() {
     char *words[] = {
-    "MOUNTAIN", "RIVER", "OCEAN", "FOREST", "DESERT", "VALLEY", "PRAIRIE", "JUNGLE", "TUNDRA", "VOLCANO",
-    "ISLAND", "BEACH", "HARBOR", "CANYON", "PLATEAU", "SUMMIT", "GLACIER", "CLIFF", "WATERFALL", "HORIZON",
-    "SUNRISE", "SUNSET", "THUNDER", "LIGHTNING", "RAINBOW", "WHIRLPOOL", "SANDSTORM", "TORNADO", "AVALANCHE", "EARTHQUAKE",
-    "MEADOW", "GARDEN", "ORCHARD", "VINEYARD", "PASTURE", "FARMLAND", "WILDERNESS", "GROVE", "SWAMP", "MARSH",
-    "SCHOOL", "COLLEGE", "LIBRARY", "MUSEUM", "GALLERY", "STADIUM", "THEATER", "HOSPITAL", "STATION", "UNIVERSITY",
-    "AIRPLANE", "HELICOPTER", "SUBMARINE", "SCOOTER", "BICYCLE", "MOTORCYCLE", "BUS", "TRAM", "SUBWAY", "TRAIN",
-    "POLICE", "FIREMAN", "DOCTOR", "NURSE", "TEACHER", "LAWYER", "JUDGE", "PILOT", "ENGINEER", "SCIENTIST",
-    "ARTIST", "MUSICIAN", "PAINTER", "SCULPTOR", "WRITER", "AUTHOR", "DIRECTOR", "ACTOR", "DANCER", "SINGER",
-    "STUDENT", "PROFESSOR", "LIBRARIAN", "MANAGER", "WORKER", "CLERK", "CASHIER", "WAITER", "BARISTA", "CHEF",
-    "COMPUTER", "KEYBOARD", "MONITOR", "PRINTER", "SCANNER", "ROUTER", "MODEM", "SPEAKER", "TABLET", "CAMERA",
-    "SOFTWARE", "HARDWARE", "NETWORK", "DATABASE", "BROWSER", "PROGRAM", "SYSTEM", "SERVER", "BACKUP", "VIRTUAL",
-    "PYTHON", "JAVA", "CSHARP", "GOLANG", "KOTLIN", "SWIFT", "BINARY", "ARRAY", "VECTOR", "POINTER",
-    "FICTION", "NOVEL", "POETRY", "DRAMA", "COMEDY", "TRAGEDY", "BIOGRAPHY", "MYSTERY", "FANTASY", "ROMANCE",
-    "JUSTICE", "FREEDOM", "HONESTY", "INTEGRITY", "LOYALTY", "COMPASSION", "PATIENCE", "COURAGE", "RESPECT", "WISDOM",
-    "BIOLOGY", "CHEMISTRY", "PHYSICS", "GEOLOGY", "ASTRONOMY", "BOTANY", "ZOOLOGY", "ECOLOGY", "GENETICS", "MICROBES",
-    "ALGORITHM", "EQUATION", "FORMULA", "THEOREM", "CALCULUS", "GEOMETRY", "ALGEBRA", "STATISTICS", "INTEGRAL", "MATRIX",
-    "ROBOTICS", "CYBERNETICS", "NANOTECH", "QUANTUM", "GRAVITY", "RELATIVITY", "TELESCOPE", "MICROSCOPE", "SATELLITE", "PROBE",
+    "THEOREM", "CALCULUS", "GEOMETRY", "ALGEBRA", "STATISTICS", "INTEGRAL", "MATRIX",
+    "ROBOTICS", "CYBERNETICS", "NANOTECH", "QUANTUM", "GRAVITY", "RELATIVITY", "TELESCOPE", "MICROSCOPE", "SATELLITE", 
     "GALAXY", "PLANET", "COMET", "ASTEROID", "METEOR", "NEBULA", "QUASAR", "PULSAR", "BLACKHOLE",
     "STADIUM", "BALLPARK", "COURT", "ARENA", "GYM", "TRACK", "FIELD", "RINK", "POOL", "RACEWAY",
     "SOCCER", "BASKETBALL", "BASEBALL", "FOOTBALL", "HOCKEY", "VOLLEYBALL", "TENNIS", "CRICKET", "RUGBY", "GOLF",
@@ -669,15 +641,30 @@ void random_goal_word() {
     "PROGRAM", "PROJECT", "ASSIGNMENT", "TASK", "DEADLINE", "GOAL", "STRATEGY", "MEETING", "DISCUSSION", "PLAN",
     "ROBOT", "DRONE", "MACHINE", "AUTOMATION", "SENSOR", "MICROCHIP", "CIRCUIT", "GADGET", "INTERFACE", "CONTROLLER",
     "COMPANY", "STARTUP", "CORPORATION", "AGENCY", "BUREAU", "OFFICE", "BRANCH", "FIRM", "SUBSIDIARY", "ENTERPRISE",
-    "RESOURCE", "SUPPLY", "DISTRIBUTION", "DEMAND", "MANAGEMENT", "INVENTORY", "PRODUCTION", "OPERATION", "MAINTENANCE", "LOGISTICS",
+    "RESOURCE", "SUPPLY", "DISTRIBUTION", "DEMAND", "MANAGEMENT", "INVENTORY", "PRODUCTION", "OPERATION", "MAINTENANCE", 
     "LEADER", "TEAM", "GROUP", "COLLABORATE", "NEGOTIATE", "COORDINATE", "SUPPORT", "ASSIST", "CONSULT", "EVALUATE",
     "WEBSITE", "BLOG", "FORUM", "SOCIAL", "PLATFORM", "MEDIA", "APPLICATION", "CONTENT", "SERVICE", "SUPPORT",
-    "EARTH", "PLANET", "MARS", "VENUS", "JUPITER", "SATURN", "MERCURY", "URANUS", "NEPTUNE", "PLUTO",
-    "APPLE", "BANANA", "GRAPES", "ORANGE", "MELON", "MANGO", "PEACH", "CHERRY", "PEAR", "PLUM",
+    "EARTH", "PLANET", "MARS", "VENUS", "JUPITER", "SATURN", "MERCURY", "URANUS", "MOUNTAIN", "RIVER", "OCEAN",
+    "ISLAND", "BEACH", "HARBOR", "CANYON", "PLATEAU", "SUMMIT", "GLACIER", "CLIFF", "WATERFALL", "HORIZON",
+    "SUNRISE", "SUNSET", "THUNDER", "LIGHTNING", "RAINBOW", "WHIRLPOOL", "SANDSTORM", "TORNADO", "AVALANCHE", 
+    "MEADOW", "GARDEN", "ORCHARD", "VINEYARD", "PASTURE", "FARMLAND", "WILDERNESS", "GROVE", "SWAMP", "MARSH",
+    "SCHOOL", "COLLEGE", "LIBRARY", "MUSEUM", "GALLERY", "STADIUM", "THEATER", "HOSPITAL", "STATION", "UNIVERSITY",
+    "AIRPLANE", "HELICOPTER", "SUBMARINE", "SCOOTER", "BICYCLE", "MOTORCYCLE", "BUS", "TRAM", "SUBWAY", "TRAIN",
+    "POLICE", "FIREMAN", "DOCTOR", "NURSE", "TEACHER", "LAWYER", "JUDGE", "PILOT", "ENGINEER", "SCIENTIST",
+    "ARTIST", "MUSICIAN", "PAINTER", "SCULPTOR", "WRITER", "AUTHOR", "DIRECTOR", "ACTOR", "DANCER", "SINGER",
+    "STUDENT", "PROFESSOR", "LIBRARIAN", "MANAGER", "WORKER", "CLERK", "CASHIER", "WAITER", "BARISTA", "CHEF",
+    "COMPUTER", "KEYBOARD", "MONITOR", "PRINTER", "SCANNER", "ROUTER", "MODEM", "SPEAKER", "TABLET", "CAMERA",
+    "SOFTWARE", "HARDWARE", "NETWORK", "DATABASE", "BROWSER", "PROGRAM", "SYSTEM", "SERVER", "BACKUP", "VIRTUAL",
+    "PYTHON", "JAVA", "CSHARP", "GOLANG", "KOTLIN", "SWIFT", "BINARY", "ARRAY", "VECTOR", "POINTER",
+    "FICTION", "NOVEL", "POETRY", "DRAMA", "COMEDY", "TRAGEDY", "BIOGRAPHY", "MYSTERY", "FANTASY", "ROMANCE",
+    "JUSTICE", "FREEDOM", "HONESTY", "INTEGRITY", "LOYALTY", "COMPASSION", "PATIENCE", "COURAGE", "RESPECT", "WISDOM",
+    "BIOLOGY", "CHEMISTRY", "PHYSICS", "GEOLOGY", "ASTRONOMY", "BOTANY", "ZOOLOGY", "ECOLOGY", "GENETICS", "MICROBES",
+    "ALGORITHM", "EQUATION", "FORMULA", "NEPTUNE", "PLUTO", "FOREST", "DESERT", "VALLEY", "PRAIRIE", "JUNGLE",
+    "APPLE", "BANANA", "GRAPES", "ORANGE", "MELON", "MANGO", "PEACH", "CHERRY", "PEAR", "PLUM", "VOLCANO",
     "DREAM", "IMAGINE", "CREATE", "WONDER", "DISCOVER", "EXPLORE", "BUILD", "INVENT", "LEARN", "GROW",
-    "SMILE", "LAUGH", "CRY", "SIGH", "YAWN", "SHOUT", "WHISPER", "SCREAM", "TALK", "SING",
-    "RUN", "JUMP", "WALK", "DANCE", "SWIM", "CLIMB", "CRAWL", "SLIDE", "STRETCH", "SPIN",
-    "SHIRT", "PANTS", "JACKET", "SCARF", "GLOVES", "HAT", "SHOES", "SOCKS", "BELT", "BOOTS",
+    "SMILE", "LAUGH", "CRY", "SIGH", "YAWN", "SHOUT", "WHISPER", "SCREAM", "TALK", "SING", "LOGISTICS",
+    "RUN", "JUMP", "WALK", "DANCE", "SWIM", "CLIMB", "CRAWL", "SLIDE", "STRETCH", "SPIN", "PROBE", "EARTHQUAKE",
+    "SHIRT", "PANTS", "JACKET", "SCARF", "GLOVES", "HAT", "SHOES", "SOCKS", "BELT", "BOOTS", "TUNDRA", 
     "PHONE", "TABLET", "LAPTOP", "CAMERA", "REMOTE", "SPEAKER", "HEADPHONES", "BATTERY", "CHARGER", "MONITOR",
     "PENCIL", "ERASER", "MARKER", "NOTEBOOK", "RULER", "SCISSORS", "GLUE", "TAPE", "PAPER", "FOLDER"
     };
