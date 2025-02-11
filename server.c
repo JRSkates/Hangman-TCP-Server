@@ -11,7 +11,7 @@
 
 // Server Configuration Constants
 #define PORT 8080         // The port number the server listens on
-#define PLAYER_COUNT 1 // Maximum number of players allowed in the game
+#define PLAYER_COUNT 2 // Maximum number of players allowed in the game
 #define MAX_GUESSES 8     // Maximum wrong guesses allowed per player
 
 // Enums for function completion or failure
