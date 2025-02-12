@@ -17,6 +17,7 @@
 // Function Declarations
 int create_server(int player_count);
 void add_new_player(int server_fd, int *client_sockets, int *connections_pending_name_input, int *connections_players);
+int reject_incoming_connections(int server_fd, fd_set *readfds);
 void handle_client_name_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *connections_pending_name_input);
 void handle_ready_up(int server_fd, int *client_sockets, fd_set *readfds, char **player_names, int *connected_players);
 void play_hangman(int server_fd, int *client_sockets, int *connected_players, char *goal_word, fd_set *readfds, char **player_names);
@@ -28,7 +29,6 @@ void random_goal_word();
 char *goal_word = NULL; 
 int max_player_count = 0;
 int player_count = 0;
-int game_started = 0;  // 0 = waiting for players, 1 = game in progress
 
 int main(void) {
     srand(time(NULL)); // Ensure randomness
@@ -84,8 +84,8 @@ int main(void) {
         }
 
         printf("Waiting for players...\n");
-        printf("Connected players: %d\n", connected_players);
-        printf("Player count variable: %d\n", player_count);
+        printf("Connected players: %d\n\n", connected_players);
+
         // Wait for activity on any socket
         if (select(max_sd + 1, &readfds, NULL, NULL, NULL) < 0) {
             perror("Select failed");
@@ -99,12 +99,15 @@ int main(void) {
                 printf("Spaces available: %d\n", player_count - connections_pending_name_input);
             } else {
                 // Reject extra connections
-                int reject_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
-                if (reject_socket > 0) {
-                    char *message = "Server is full. Try again later.\n";
-                    send(reject_socket, message, strlen(message), 0);
-                    close(reject_socket);
+                int new_socket = accept(server_fd, (struct sockaddr*)&address, &addr_len);
+                if (new_socket < 0) {
+                    perror("Accept failed");
+                    exit(EXIT_FAILURE);
                 }
+        
+                int reject_value = -1;
+                send(new_socket, &reject_value, sizeof(reject_value), 0);
+                close(new_socket);
                 printf("Rejected connection from unknown client as server is full\n");
             }
         }
@@ -113,7 +116,6 @@ int main(void) {
         handle_client_name_input(client_sockets, player_names, name_received, &connected_players, &connections_pending_name_input);
     }
 
-    game_started = 1;
     printf("Connected players DEBUG: %d\n", connected_players);
     // Send ready-up message to all players
     char ready_message[] = "All players have entered their usernames. Ready up by entering 'r'\n";
@@ -193,25 +195,17 @@ int create_server(int player_count) {
 void add_new_player(int server_fd, int *client_sockets, int *connections_pending_name_input, int *connected_players) {
     struct sockaddr_in address;
     socklen_t addr_len = sizeof(address);
+    int join_confirmed_status = 0;
     int new_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
     if (new_socket < 0) {
         perror("Accept failed");
         exit(EXIT_FAILURE);
     }
 
-    // if (*connected_players == player_count) {
-    //     printf("Rejected new connection (game already in progress or server full)\n");
-    //     char *message = "Game already in progress\n";
-    //     send(new_socket, message, strlen(message), 0);
-    //     close(new_socket);
-    //     return;
-    // }
-
     printf("New connection, socket fd: %d, ip: %s, port: %d\n",
            new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 
-    // send(new_socket, "Welcome to the game! Please enter your name:\n",
-    //      strlen("Welcome to the game! Please enter your name:\n"), 0);
+    send(new_socket, &join_confirmed_status, sizeof(join_confirmed_status), 0);
 
     // Store the client socket
     for (int i = 0; i < player_count; i++) {
@@ -221,6 +215,24 @@ void add_new_player(int server_fd, int *client_sockets, int *connections_pending
             break;
         }
     }
+}
+
+// Reject incoming connections whilst game is in progress
+int reject_incoming_connections(int server_fd, fd_set *readfds) {
+    if (FD_ISSET(server_fd, readfds)) {
+        struct sockaddr_in address;
+        socklen_t addr_len = sizeof(address);
+        int new_socket = accept(server_fd, (struct sockaddr*)&address, &addr_len);
+        if (new_socket < 0) {
+            perror("Accept failed");
+            exit(EXIT_FAILURE);
+        }
+
+        int reject_value = -1;
+        send(new_socket, &reject_value, sizeof(reject_value), 0);
+        close(new_socket);
+    }
+    return 0;
 }
 
 // Handle client input asynchronously (players can enter names independently)
@@ -310,18 +322,11 @@ void handle_ready_up(int server_fd, int *client_sockets, fd_set *readfds, char *
             exit(EXIT_FAILURE);
         }
 
-         // **Reject new clients**
-        if (FD_ISSET(server_fd, readfds)) {
-            struct sockaddr_in address;
-            socklen_t addr_len = sizeof(address);
-            int new_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
-            if (new_socket > 0) {
-                printf("New client tried to join during ready-up. Rejecting...\n");
-                char *message = "Game already in progress. Try again later.\n";
-                send(new_socket, message, strlen(message), 0);
-                close(new_socket);
-            }
-        }
+        // Reject new connection requests
+        if (reject_incoming_connections(server_fd, readfds) < 0) {
+            perror("New Rejection Request Error");
+            exit(EXIT_FAILURE);
+        } 
 
         for (int i = 0; i < *connected_players; i++) {  // Iterate through active players
             int sd = client_sockets[i];
@@ -427,18 +432,11 @@ void play_hangman(int server_fd, int *client_sockets, int *connected_players, ch
             exit(EXIT_FAILURE);
         }
 
-        // **Reject new clients**
-        if (FD_ISSET(server_fd, readfds)) {
-            struct sockaddr_in address;
-            socklen_t addr_len = sizeof(address);
-            int new_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
-            if (new_socket > 0) {
-                printf("New client tried to join during game. Rejecting...\n");
-                char *message = "Game already in progress. Try again later.\n";
-                send(new_socket, message, strlen(message), 0);
-                close(new_socket);
-            }
-        }
+        // Reject new connection requests
+        if (reject_incoming_connections(server_fd, readfds) < 0) {
+            perror("New Rejection Request Error");
+            exit(EXIT_FAILURE);
+        } 
 
         // Process guesses for each player
         for (int i = 0; i < *connected_players; i++) {
@@ -615,17 +613,11 @@ void format_and_send_leaderboard(int server_fd, int *client_sockets, int *connec
             exit(EXIT_FAILURE);
         }
 
-        if (FD_ISSET(server_fd, readfds)) {
-            struct sockaddr_in address;
-            socklen_t addr_len = sizeof(address);
-            int new_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
-            if (new_socket > 0) {
-                printf("New client tried to join during leaderboard. Rejecting...\n");
-                char *message = "Game already in progress. Try again later.\n";
-                send(new_socket, message, strlen(message), 0);
-                close(new_socket);
-            }
-        }   
+        // Reject new connection requests
+        if (reject_incoming_connections(server_fd, readfds) < 0) {
+            perror("New Rejection Request Error");
+            exit(EXIT_FAILURE);
+        } 
 
         // Process received scores
         for (int i = 0; i < *connected_players; i++) {
