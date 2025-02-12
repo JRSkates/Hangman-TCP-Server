@@ -584,7 +584,7 @@ void format_and_send_leaderboard(int *client_sockets, int *connected_players, in
         if (player_names[i] != NULL && client_sockets[i] > 0) {  // Ensure valid player
             snprintf(leaderboard_buffer + strlen(leaderboard_buffer), 
                      sizeof(leaderboard_buffer) - strlen(leaderboard_buffer), 
-                     "%s:%d\n", player_names[i], leaderboard[i]);
+                     "%s:%d,", player_names[i], leaderboard[i]);
         } else {
             snprintf(leaderboard_buffer + strlen(leaderboard_buffer), 
                      sizeof(leaderboard_buffer) - strlen(leaderboard_buffer), 
