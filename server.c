@@ -14,9 +14,6 @@
 #define PLAYER_COUNT 3 // Maximum number of players allowed in the game
 #define MAX_GUESSES 8     // Maximum wrong guesses allowed per player
 
-// Enums for function completion or failure
-// enum { SUCCESS=1, FAILURE=0 };
-
 // Function Declarations
 int create_server(int player_count);
 void add_new_player(int server_fd, int *client_sockets, int *connections_pending_name_input);
@@ -123,6 +120,7 @@ int main(void) {
         if (client_sockets[i] > 0) {
             close(client_sockets[i]);
             free(player_names[i]);
+            player_names[i] = NULL;
         }
     }
 
@@ -304,14 +302,6 @@ void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, 
 
 
 // Core Hangman Loop
-
-// ***************POTENTIAL BUG*************************
-// No safety to handle if a player disconnects after their game is over
-// checks if game is finished during guess processing loop 
-// skips that users loop with continue if they have finished
-// condition to handle disconnect is later in the loop - so would likely be missed
-// *****************************************************
-
 void play_hangman(int *client_sockets, int *connected_players, char *goal_word, fd_set *readfds, char **player_names) {
     int word_length = strlen(goal_word);
     int guesses_left[*connected_players]; // Stores remaining guesses for each player (associated by index position)
@@ -489,6 +479,7 @@ void play_hangman(int *client_sockets, int *connected_players, char *goal_word, 
     printf("All players have finished the game. Exiting...\n");
 }
 
+// Function to check if the player has guessed the word in full
 int is_word_guessed(int *player_progress, int word_length) {
     for (int i = 0; i < word_length; i++) {
         if (player_progress[i] == 0) {  // If any letter is still missing, return false
@@ -498,6 +489,7 @@ int is_word_guessed(int *player_progress, int word_length) {
     return 1;  // All letters have been guessed
 }
 
+// Receives the final score from all clients and sends back a leaderboard of all the usernames/scores
 void format_and_send_leaderboard(int *client_sockets, int *connected_players, int *leaderboard, char * goal_word, fd_set *readfds, char **player_names) {
     int final_scores_received = 0;
     short int score = 0; 
