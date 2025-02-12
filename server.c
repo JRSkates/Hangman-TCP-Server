@@ -22,8 +22,6 @@ void handle_ready_up(int server_fd, int *client_sockets, fd_set *readfds, char *
 void play_hangman(int server_fd, int *client_sockets, int *connected_players, char *goal_word, fd_set *readfds, char **player_names);
 int is_word_guessed(int *player_progress, int word_length);
 void format_and_send_leaderboard(int server_fd, int *client_sockets, int *connected_players, int *leaderboard, char * goal_word, fd_set *readfds, char **player_names);
-void send_leaderboard_to_all(int *client_sockets, int connected_players, int *leaderboard, char *goal_word);
-void flush_socket(int sd);
 void random_goal_word();
 
 // Global pointer to dynamically allocated goal word
@@ -708,17 +706,6 @@ void format_and_send_leaderboard(int server_fd, int *client_sockets, int *connec
     //clear();
 }
 
-void flush_socket(int sd) {
-    char flush_buffer[128];  // Temporary buffer for clearing input
-    int bytes_read;
-    
-    // Use MSG_DONTWAIT to read and discard any leftover data
-    while ((bytes_read = recv(sd, flush_buffer, sizeof(flush_buffer), MSG_DONTWAIT)) > 0) {
-        // Debugging (Optional)
-        printf("Flushed %d bytes from Player socket %d\n", bytes_read, sd);
-    }
-}
-
 void random_goal_word() {
     char *words[] = {
     "THEOREM", "CALCULUS", "GEOMETRY", "ALGEBRA", "STATISTICS", "INTEGRAL", "MATRIX",
@@ -787,3 +774,13 @@ void random_goal_word() {
     strcpy(goal_word, selected_word);
 }
 
+// void flush_socket(int sd) {
+//     char flush_buffer[128];  // Temporary buffer for clearing input
+//     int bytes_read;
+    
+//     // Use MSG_DONTWAIT to read and discard any leftover data
+//     while ((bytes_read = recv(sd, flush_buffer, sizeof(flush_buffer), MSG_DONTWAIT)) > 0) {
+//         // Debugging (Optional)
+//         printf("Flushed %d bytes from Player socket %d\n", bytes_read, sd);
+//     }
+// }
