@@ -11,7 +11,7 @@
 
 // Server Configuration Constants
 #define PORT 8080         // The port number the server listens on
-#define PLAYER_COUNT 3 // Maximum number of players allowed in the game
+// #define player_count 3 // Maximum number of players allowed in the game
 #define MAX_GUESSES 8     // Maximum wrong guesses allowed per player
 
 // Function Declarations
@@ -28,13 +28,33 @@ void random_goal_word();
 
 // Global pointer to dynamically allocated goal word
 char *goal_word = NULL; 
+int max_player_count = 0;
+int player_count = 0;
 
 int main(void) {
     srand(time(NULL)); // Ensure randomness
-    int client_sockets[PLAYER_COUNT] = {0}; // Stores active client sockets
-    char *player_names[PLAYER_COUNT] = {0}; // Stores player names
-    int name_received[PLAYER_COUNT] = {0};  // Tracks if a player has entered their name
-    int leaderboard[PLAYER_COUNT] = {0}; // Stores final scores for all clients/players
+    printf("Enter the maximum number of players allowed in the game: ");
+    scanf("%d", &max_player_count);
+    printf("Max players: %d\n", max_player_count);
+    player_count = max_player_count;
+
+    int *client_sockets = malloc(player_count * sizeof(int));
+    char **player_names = malloc(player_count * sizeof(char *));
+    int *name_received = malloc(player_count * sizeof(int));
+    int *leaderboard = malloc(player_count * sizeof(int));
+
+    if (!client_sockets || !player_names || !name_received || !leaderboard) {
+        perror("Memory allocation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    memset(client_sockets, 0, player_count * sizeof(int));
+    memset(name_received, 0, player_count * sizeof(int));
+    memset(leaderboard, 0, player_count * sizeof(int));
+    for (int i = 0; i < player_count; i++) {
+        player_names[i] = NULL; // Initialize to NULL
+    }
+
     int server_fd;
     struct sockaddr_in address;
     socklen_t addr_len = sizeof(address);
@@ -44,7 +64,7 @@ int main(void) {
     printf("Goal Word: %s\n", goal_word);
 
     // Create the server socket and start listening
-    server_fd = create_server(PLAYER_COUNT);
+    server_fd = create_server(player_count);
 
     int connected_players = 0;  // Tracks players who have entered names and fully connected to the game
     int connections_pending_name_input = 0; // Tracks active sockets that haven't sent their name
@@ -52,20 +72,21 @@ int main(void) {
     fd_set readfds;
 
     // Accept new players and handle their name input until all players have entered their names
-    while (connected_players < PLAYER_COUNT) {
+    while (connected_players < player_count) {
         FD_ZERO(&readfds); // Clear the file descriptor set
         FD_SET(server_fd, &readfds); // Add server socket to the set
         int max_sd = server_fd;
 
         // Add client sockets to the read set
-        for (int i = 0; i < PLAYER_COUNT; i++) {
+        for (int i = 0; i < player_count; i++) {
             int sd = client_sockets[i];
             if (sd > 0) FD_SET(sd, &readfds);
             if (sd > max_sd) max_sd = sd;
         }
 
         printf("Waiting for players...\n");
-
+        printf("Connected players: %d\n", connected_players);
+        printf("Player count variable: %d\n", player_count);
         // Wait for activity on any socket
         if (select(max_sd + 1, &readfds, NULL, NULL, NULL) < 0) {
             perror("Select failed");
@@ -74,9 +95,9 @@ int main(void) {
 
         // Accept new players if space is available
         if (FD_ISSET(server_fd, &readfds)) {
-            if (connections_pending_name_input < PLAYER_COUNT) {
+            if (connections_pending_name_input < player_count) {
                 add_new_player(server_fd, client_sockets, &connections_pending_name_input);
-                printf("Spaces available: %d\n", PLAYER_COUNT - connections_pending_name_input);
+                printf("Spaces available: %d\n", player_count - connections_pending_name_input);
             } else {
                 // Reject extra connections
                 int reject_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
@@ -96,7 +117,7 @@ int main(void) {
     printf("Connected players DEBUG: %d\n", connected_players);
     // Send ready-up message to all players
     char ready_message[] = "All players have entered their usernames. Ready up by entering 'r'\n";
-    for (int i = 0; i < PLAYER_COUNT; i++) {
+    for (int i = 0; i < player_count; i++) {
         send(client_sockets[i], ready_message, strlen(ready_message), 0);
     }
 
@@ -108,7 +129,7 @@ int main(void) {
 
 
     char leaderboard_message[] = "All Players have finished! Generating leaderboard...\n";
-    for (int i = 0; i < PLAYER_COUNT; i++) {
+    for (int i = 0; i < player_count; i++) {
         send(client_sockets[i], leaderboard_message, strlen(ready_message), 0);
     }
 
@@ -116,7 +137,7 @@ int main(void) {
     format_and_send_leaderboard(client_sockets, &connected_players, leaderboard, goal_word, &readfds, player_names);
 
     // Close all client sockets and free allocated memory
-    for (int i = 0; i < PLAYER_COUNT; i++) {
+    for (int i = 0; i < player_count; i++) {
         if (client_sockets[i] > 0) {
             close(client_sockets[i]);
             free(player_names[i]);
@@ -125,6 +146,10 @@ int main(void) {
     }
 
     // Free allocated memory before exiting
+    free(client_sockets);
+    free(player_names);
+    free(name_received);
+    free(leaderboard);
     free(goal_word);
     goal_word = NULL;
 
@@ -181,7 +206,7 @@ void add_new_player(int server_fd, int *client_sockets, int *connections_pending
     //      strlen("Welcome to the game! Please enter your name:\n"), 0);
 
     // Store the client socket
-    for (int i = 0; i < PLAYER_COUNT; i++) {
+    for (int i = 0; i < player_count; i++) {
         if (client_sockets[i] == 0) { // Find empty slot
             client_sockets[i] = new_socket;
             (*connections_pending_name_input)++; // Increment immediately when a socket is accepted
@@ -194,7 +219,7 @@ void add_new_player(int server_fd, int *client_sockets, int *connections_pending
 void handle_client_name_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *connections_pending_name_input) {
     char name_buffer[50];
 
-    for (int i = 0; i < PLAYER_COUNT; i++) {
+    for (int i = 0; i < max_player_count; i++) {
         int sd = client_sockets[i];
 
         if (sd > 0) {
@@ -206,12 +231,37 @@ void handle_client_name_input(int *client_sockets, char **player_names, int *nam
             if (valread == 0) {  // Client has disconnected
                 printf("Player %d (Socket %d) disconnected.\n", i + 1, sd);
                 close(sd);
-                client_sockets[i] = 0;  // Free up the slot
+
+                // Free memory and reset slot
                 free(player_names[i]);
                 player_names[i] = NULL;
+                client_sockets[i] = 0;
+
+                // Adjust tracking variables based on whether they had entered a name
+                if (name_received[i] == 1) {
+                    (*connected_players)--; 
+                };
+
+                (*connections_pending_name_input)--;
                 name_received[i] = 0;
-                (*connections_pending_name_input)--;  // Allow a new player to join
-            } else if (valread > 0 && !name_received[i]) {
+
+                // player_count--;
+
+                // **Shift remaining players down**
+                for (int j = i; j < max_player_count - 1; j++) {
+                    client_sockets[j] = client_sockets[j + 1];
+                    player_names[j] = player_names[j + 1];
+                    name_received[j] = name_received[j + 1];
+                }
+
+                // Clear the last slot
+                client_sockets[max_player_count - 1] = 0;
+                player_names[max_player_count - 1] = NULL;
+                name_received[max_player_count - 1] = 0;
+
+                i--;  // Adjust loop index after shifting
+            } 
+            else if (valread > 0 && !name_received[i]) {  // **New name received**
                 name_buffer[strcspn(name_buffer, "\n")] = 0;  // Remove newline
                 player_names[i] = strdup(name_buffer);
                 printf("Player %d registered as: %s\n", i + 1, player_names[i]);
@@ -222,10 +272,13 @@ void handle_client_name_input(int *client_sockets, char **player_names, int *nam
     }
 }
 
+
 // Handle clients readying up, and adjusts if they disconnect during this process
 void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players) {
     int ready_players = 0; // Tracks how many players have sent 'r'
-    int player_ready_check[PLAYER_COUNT] = {0}; // Track which players are readyed up 
+    int *player_ready_check = malloc(player_count * sizeof(int));
+    memset(player_ready_check, 0, player_count * sizeof(int)); // Initialize to 0
+    // int player_ready_check[player_count] = {0}; // Track which players are readyed up 
     char buffer[10];
 
     printf("Waiting for all players to ready up...\n");
