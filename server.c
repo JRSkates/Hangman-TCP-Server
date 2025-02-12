@@ -16,12 +16,12 @@
 
 // Function Declarations
 int create_server(int player_count);
-void add_new_player(int server_fd, int *client_sockets, int *connections_pending_name_input);
+void add_new_player(int server_fd, int *client_sockets, int *connections_pending_name_input, int *connections_players);
 void handle_client_name_input(int *client_sockets, char **player_names, int *name_received, int *connected_players, int *connections_pending_name_input);
-void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players);
-void play_hangman(int *client_sockets, int *connected_players, char *goal_word, fd_set *readfds, char **player_names);
+void handle_ready_up(int server_fd, int *client_sockets, fd_set *readfds, char **player_names, int *connected_players);
+void play_hangman(int server_fd, int *client_sockets, int *connected_players, char *goal_word, fd_set *readfds, char **player_names);
 int is_word_guessed(int *player_progress, int word_length);
-void format_and_send_leaderboard(int *client_sockets, int *connected_players, int *leaderboard, char * goal_word, fd_set *readfds, char **player_names);
+void format_and_send_leaderboard(int server_fd, int *client_sockets, int *connected_players, int *leaderboard, char * goal_word, fd_set *readfds, char **player_names);
 void send_leaderboard_to_all(int *client_sockets, int connected_players, int *leaderboard, char *goal_word);
 void flush_socket(int sd);
 void random_goal_word();
@@ -30,6 +30,7 @@ void random_goal_word();
 char *goal_word = NULL; 
 int max_player_count = 0;
 int player_count = 0;
+int game_started = 0;  // 0 = waiting for players, 1 = game in progress
 
 int main(void) {
     srand(time(NULL)); // Ensure randomness
@@ -96,7 +97,7 @@ int main(void) {
         // Accept new players if space is available
         if (FD_ISSET(server_fd, &readfds)) {
             if (connections_pending_name_input < player_count) {
-                add_new_player(server_fd, client_sockets, &connections_pending_name_input);
+                add_new_player(server_fd, client_sockets, &connections_pending_name_input, &connected_players);
                 printf("Spaces available: %d\n", player_count - connections_pending_name_input);
             } else {
                 // Reject extra connections
@@ -114,6 +115,7 @@ int main(void) {
         handle_client_name_input(client_sockets, player_names, name_received, &connected_players, &connections_pending_name_input);
     }
 
+    game_started = 1;
     printf("Connected players DEBUG: %d\n", connected_players);
     // Send ready-up message to all players
     char ready_message[] = "All players have entered their usernames. Ready up by entering 'r'\n";
@@ -122,10 +124,10 @@ int main(void) {
     }
 
     // Wait for all players to send 'r'
-    handle_ready_up(client_sockets, &readfds, player_names, &connected_players);
+    handle_ready_up(server_fd, client_sockets, &readfds, player_names, &connected_players);
 
     // Main Game loop
-    play_hangman(client_sockets, &connected_players, goal_word, &readfds, player_names);
+    play_hangman(server_fd, client_sockets, &connected_players, goal_word, &readfds, player_names);
 
 
     char leaderboard_message[] = "All Players have finished! Generating leaderboard...\n";
@@ -134,7 +136,7 @@ int main(void) {
     }
 
     // Receive final scores in formatted string: "Username:Score"
-    format_and_send_leaderboard(client_sockets, &connected_players, leaderboard, goal_word, &readfds, player_names);
+    format_and_send_leaderboard(server_fd, client_sockets, &connected_players, leaderboard, goal_word, &readfds, player_names);
 
     // Close all client sockets and free allocated memory
     for (int i = 0; i < player_count; i++) {
@@ -190,7 +192,7 @@ int create_server(int player_count) {
 
 
 // Accept a new player and store their socket
-void add_new_player(int server_fd, int *client_sockets, int *connections_pending_name_input) {
+void add_new_player(int server_fd, int *client_sockets, int *connections_pending_name_input, int *connected_players) {
     struct sockaddr_in address;
     socklen_t addr_len = sizeof(address);
     int new_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
@@ -198,6 +200,14 @@ void add_new_player(int server_fd, int *client_sockets, int *connections_pending
         perror("Accept failed");
         exit(EXIT_FAILURE);
     }
+
+    // if (*connected_players == player_count) {
+    //     printf("Rejected new connection (game already in progress or server full)\n");
+    //     char *message = "Game already in progress\n";
+    //     send(new_socket, message, strlen(message), 0);
+    //     close(new_socket);
+    //     return;
+    // }
 
     printf("New connection, socket fd: %d, ip: %s, port: %d\n",
            new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
@@ -274,7 +284,7 @@ void handle_client_name_input(int *client_sockets, char **player_names, int *nam
 
 
 // Handle clients readying up, and adjusts if they disconnect during this process
-void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, int *connected_players) {
+void handle_ready_up(int server_fd, int *client_sockets, fd_set *readfds, char **player_names, int *connected_players) {
     int ready_players = 0; // Tracks how many players have sent 'r'
     int *player_ready_check = malloc(player_count * sizeof(int));
     memset(player_ready_check, 0, player_count * sizeof(int)); // Initialize to 0
@@ -285,7 +295,8 @@ void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, 
 
     while (ready_players < *connected_players) {  // Dynamically wait for current players
         FD_ZERO(readfds);
-        int max_sd = 0;
+        FD_SET(server_fd, readfds);
+        int max_sd = server_fd;
 
         for (int i = 0; i < *connected_players; i++) {  // Loop only through active players
             if (client_sockets[i] > 0) {
@@ -299,6 +310,19 @@ void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, 
         if (select(max_sd + 1, readfds, NULL, NULL, NULL) < 0) {
             perror("Select failed");
             exit(EXIT_FAILURE);
+        }
+
+         // **Reject new clients**
+        if (FD_ISSET(server_fd, readfds)) {
+            struct sockaddr_in address;
+            socklen_t addr_len = sizeof(address);
+            int new_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
+            if (new_socket > 0) {
+                printf("New client tried to join during ready-up. Rejecting...\n");
+                char *message = "Game already in progress. Try again later.\n";
+                send(new_socket, message, strlen(message), 0);
+                close(new_socket);
+            }
         }
 
         for (int i = 0; i < *connected_players; i++) {  // Iterate through active players
@@ -355,7 +379,7 @@ void handle_ready_up(int *client_sockets, fd_set *readfds, char **player_names, 
 
 
 // Core Hangman Loop
-void play_hangman(int *client_sockets, int *connected_players, char *goal_word, fd_set *readfds, char **player_names) {
+void play_hangman(int server_fd, int *client_sockets, int *connected_players, char *goal_word, fd_set *readfds, char **player_names) {
     int word_length = strlen(goal_word);
     int guesses_left[*connected_players]; // Stores remaining guesses for each player (associated by index position)
     int server_arr[*connected_players][word_length]; // Nested tracking arrays for each clients progress when guessing the word
@@ -381,7 +405,8 @@ void play_hangman(int *client_sockets, int *connected_players, char *goal_word, 
 
     while (finished_players < *connected_players) { // Keep looping until all players have finished
         FD_ZERO(readfds);
-        int max_sd = 0;
+        FD_SET(server_fd, readfds);
+        int max_sd = server_fd;
         int active_players = 0;
 
         for (int i = 0; i < *connected_players; i++) {  // Loop only through active players
@@ -402,6 +427,19 @@ void play_hangman(int *client_sockets, int *connected_players, char *goal_word, 
         if (select(max_sd + 1, readfds, NULL, NULL, NULL) < 0) {
             perror("Select failed");
             exit(EXIT_FAILURE);
+        }
+
+        // **Reject new clients**
+        if (FD_ISSET(server_fd, readfds)) {
+            struct sockaddr_in address;
+            socklen_t addr_len = sizeof(address);
+            int new_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
+            if (new_socket > 0) {
+                printf("New client tried to join during game. Rejecting...\n");
+                char *message = "Game already in progress. Try again later.\n";
+                send(new_socket, message, strlen(message), 0);
+                close(new_socket);
+            }
         }
 
         // Process guesses for each player
@@ -543,7 +581,7 @@ int is_word_guessed(int *player_progress, int word_length) {
 }
 
 // Receives the final score from all clients and sends back a leaderboard of all the usernames/scores
-void format_and_send_leaderboard(int *client_sockets, int *connected_players, int *leaderboard, char * goal_word, fd_set *readfds, char **player_names) {
+void format_and_send_leaderboard(int server_fd, int *client_sockets, int *connected_players, int *leaderboard, char * goal_word, fd_set *readfds, char **player_names) {
     int final_scores_received = 0;
     short int score = 0; 
 
@@ -551,7 +589,8 @@ void format_and_send_leaderboard(int *client_sockets, int *connected_players, in
 
     while (final_scores_received < *connected_players) {
         FD_ZERO(readfds);
-        int max_sd = 0;
+        FD_SET(server_fd, readfds);
+        int max_sd = server_fd;
         int active_players = 0;
 
         // Add active sockets to read set
@@ -577,6 +616,18 @@ void format_and_send_leaderboard(int *client_sockets, int *connected_players, in
             perror("Select failed");
             exit(EXIT_FAILURE);
         }
+
+        if (FD_ISSET(server_fd, readfds)) {
+            struct sockaddr_in address;
+            socklen_t addr_len = sizeof(address);
+            int new_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len);
+            if (new_socket > 0) {
+                printf("New client tried to join during leaderboard. Rejecting...\n");
+                char *message = "Game already in progress. Try again later.\n";
+                send(new_socket, message, strlen(message), 0);
+                close(new_socket);
+            }
+        }   
 
         // Process received scores
         for (int i = 0; i < *connected_players; i++) {
