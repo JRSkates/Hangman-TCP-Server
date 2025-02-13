@@ -163,10 +163,17 @@ int main(void) {
 int create_server(int player_count) {
     int server_fd;
     struct sockaddr_in address;
+    int opt = 1; // Enable option
 
     // Create socket
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("Socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Set socket option to allow address reuse
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt failed");
         exit(EXIT_FAILURE);
     }
 
