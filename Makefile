@@ -1,6 +1,6 @@
 CC = gcc
 
-SRC = server.c
+SRC = server.c main.c
 EXEC = hangman_server
 
 all: $(EXEC)
